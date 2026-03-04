@@ -38,7 +38,7 @@ end
 
 local function TeleportTo(position)
 	local root = GetRoot()
-	root.CFrame = CFrame.new(position + Vector3.new(0,3,0)) -- 3 studs above to prevent clipping
+	root.CFrame = CFrame.new(position + Vector3.new(0,1,0))
 end
 
 -- ===============================
@@ -88,7 +88,35 @@ end
 for _, egg in ipairs(EggsFolder:GetChildren()) do
 	CreateHighlight(egg)
 end
+
 EggsFolder.ChildAdded:Connect(CreateHighlight)
+
+-- ===============================
+-- Rotating Camera System
+-- ===============================
+
+local Camera = workspace.CurrentCamera
+
+local CAMERA_HEIGHT = 140
+local CAMERA_DISTANCE = 80
+local ROTATION_SPEED = 0.5
+
+local angle = 0
+
+RunService.RenderStepped:Connect(function(dt)
+	local root = GetRoot()
+
+	Camera.CameraType = Enum.CameraType.Scriptable
+
+	angle += dt * ROTATION_SPEED
+
+	local offsetX = math.cos(angle) * CAMERA_DISTANCE
+	local offsetZ = math.sin(angle) * CAMERA_DISTANCE
+
+	local cameraPosition = root.Position + Vector3.new(offsetX, CAMERA_HEIGHT, offsetZ)
+
+	Camera.CFrame = CFrame.new(cameraPosition, root.Position)
+end)
 
 -- ===============================
 -- Main Loop
@@ -96,7 +124,7 @@ EggsFolder.ChildAdded:Connect(CreateHighlight)
 
 task.spawn(function()
 	while true do
-		task.wait(0.1) -- fast loop for instant teleport
+		task.wait(0.1)
 		
 		local character = GetCharacter()
 		if not character then continue end
@@ -104,7 +132,6 @@ task.spawn(function()
 		local root = character:FindFirstChild("HumanoidRootPart")
 		if not root then continue end
 
-		-- Deposit if basket full
 		if EggCount >= MAX_EGGS then
 			print("🧺 Basket Full → Going to Nest")
 			TeleportTo(NestPosition)
@@ -113,12 +140,10 @@ task.spawn(function()
 			continue
 		end
 
-		-- Retarget egg if needed
 		if not CurrentTarget or not CurrentTarget.Parent or os.clock() - LastCollectTime >= 1 then
 			CurrentTarget = GetNearestEgg()
 		end
 
-		-- Teleport to egg and collect
 		if CurrentTarget then
 			local pos = GetPosition(CurrentTarget)
 			if pos then
