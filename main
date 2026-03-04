@@ -1,5 +1,6 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local VirtualUser = game:GetService("VirtualUser") -- Required for simulating clicks
 
 local LocalPlayer = Players.LocalPlayer
 local EggsFolder = workspace:WaitForChild("EggHuntMinigame"):WaitForChild("Eggs")
@@ -90,6 +91,20 @@ for _, egg in ipairs(EggsFolder:GetChildren()) do
 end
 
 EggsFolder.ChildAdded:Connect(CreateHighlight)
+
+-- ===============================
+-- Anti-AFK Click System (Every 5 Mins)
+-- ===============================
+
+task.spawn(function()
+	while true do
+		task.wait(300) -- 300 seconds = 5 minutes
+		-- Simulates a mouse click to prevent AFK kick and interact with screen
+		VirtualUser:CaptureController()
+		VirtualUser:ClickButton1(Vector2.new(0, 0))
+		print("🖱️ Anti-AFK Click Performed")
+	end
+end)
 
 -- ===============================
 -- Rotating Camera System
