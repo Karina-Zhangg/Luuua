@@ -10,16 +10,14 @@ getgenv().AutoFarm = true
 getgenv().MaxEggsBeforeDeposit = 10 
 local currentEggCount = 0
 local lastCollectionTime = tick() 
+local AttemptedEggs = {}
 
 -- Improved Position & Physics Utility
 local function SafeTeleport(root, pos)
     if not root then return end
-    
-    -- 1. Reset Physics to prevent 'velocity stalls'
-    root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-    root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-    
-    -- 2. Apply CFrame with 3-stud height offset
+    root.AssemblyLinearVelocity = Vector3.zero
+    root.AssemblyAngularVelocity = Vector3.zero
+    -- 3-stud height offset to prevent floor clipping
     root.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
 end
 
@@ -38,9 +36,8 @@ task.spawn(function()
         local hum = char and char:FindFirstChild("Humanoid")
         if not root or not hum then continue end
 
-        -- STUCK CHECK: If no egg collected in 1.5s, nudge the character
+        -- STUCK CHECK
         if tick() - lastCollectionTime > 1.5 then
-            -- Walk backward relative to current facing direction
             hum:Move(Vector3.new(0, 0, 1), true) 
         else
             hum:Move(Vector3.new(0, 0, 0), true) 
@@ -50,9 +47,10 @@ task.spawn(function()
         if currentEggCount >= getgenv().MaxEggsBeforeDeposit then
             print("🧺 Basket Full! Teleporting to Nest...")
             SafeTeleport(root, NestPosition)
-            task.wait(0.8) -- Give the server time to process deposit
+            task.wait(0.8) 
             currentEggCount = 0
-            lastCollectionTime = tick() 
+            lastCollectionTime = tick()
+            table.clear(AttemptedEggs) 
             continue
         end
 
@@ -61,6 +59,8 @@ task.spawn(function()
         local shortestDistance = math.huge
         
         for _, egg in ipairs(EggsFolder:GetChildren()) do
+            if AttemptedEggs[egg] then continue end
+
             local pos = GetPosition(egg)
             if pos then
                 local dist = (root.Position - pos).Magnitude
@@ -73,10 +73,11 @@ task.spawn(function()
 
         -- Collection Logic
         if targetEgg then
+            AttemptedEggs[targetEgg] = true 
+            
             local eggPos = GetPosition(targetEgg)
             SafeTeleport(root, eggPos)
             
-            -- Fire Touch Interest
             local touchPart = targetEgg:IsA("Model") and (targetEgg.PrimaryPart or targetEgg:FindFirstChildWhichIsA("BasePart")) or targetEgg
             if touchPart then
                 firetouchinterest(root, touchPart, 0)
@@ -85,7 +86,19 @@ task.spawn(function()
             end
             
             currentEggCount = currentEggCount + 1
-            lastCollectionTime = tick() -- Reset the 'stuck' timer
+            lastCollectionTime = tick()
+            
+            -- RANDOM JITTER TELEPORT
+            -- Teleports you to a random spot within 15 studs before the next loop
+            task.wait(0.1)
+            local randomOffset = Vector3.new(math.random(-15, 15), 5, math.random(-15, 15))
+            SafeTeleport(root, root.Position + randomOffset)
+            
+            print("🥚 Collected. Jittering to new position...")
+        else
+            if #EggsFolder:GetChildren() > 0 then
+                table.clear(AttemptedEggs)
+            end
         end
     end
 end)
