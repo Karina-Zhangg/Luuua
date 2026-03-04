@@ -1,86 +1,91 @@
--- Made by .lordhippo (618580498251382824)
 local RunService = game:GetService("RunService")
-local LocalPlayer = game:GetService("Players").LocalPlayer
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 
 local EggsFolder = workspace:WaitForChild("EggHuntMinigame"):WaitForChild("Eggs")
-local Highlights = {}
-local Billboards = {}
-local Cooldowns = {}
+local NestPosition = Vector3.new(695.14, 50.30, 7968.96)
+
+-- Configuration
+getgenv().AutoFarm = true
+getgenv().MaxEggsBeforeDeposit = 10 
+local currentEggCount = 0
+local lastCollectionTime = tick() 
+
+-- Improved Position & Physics Utility
+local function SafeTeleport(root, pos)
+    if not root then return end
+    
+    -- 1. Reset Physics to prevent 'velocity stalls'
+    root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+    root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+    
+    -- 2. Apply CFrame with 3-stud height offset
+    root.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
+end
 
 local GetPosition = function(v)
-	return v and (v:IsA("Model") and v:GetPivot().Position or v:IsA("BasePart") and v.Position or v:IsA("Attachment") and v.WorldPosition)
+    if not v then return nil end
+    return (v:IsA("Model") and v:GetPivot().Position or v:IsA("BasePart") and v.Position)
 end
 
-local CreateVisual = function(v)
-	if Highlights[v] then return end
+-- Main Loop
+task.spawn(function()
+    while getgenv().AutoFarm do
+        task.wait(0.5) 
+        
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChild("Humanoid")
+        if not root or not hum then continue end
 
-	local Highlight = Instance.new("Highlight")
-	Highlight.FillColor = Color3.fromRGB(255, 255, 0)
-	Highlight.OutlineColor = Color3.fromRGB(255, 170, 0)
-	Highlight.FillTransparency = 0.5
-	Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-	Highlight.Parent = v
-	
-	local BillboardGui = Instance.new("BillboardGui")
-	BillboardGui.Size = UDim2.new(0, 120, 0, 40)
-	BillboardGui.StudsOffset = Vector3.new(0, 3, 0)
-	BillboardGui.AlwaysOnTop = true
-	BillboardGui.Parent = v
-	
-	local TextLabel = Instance.new("TextLabel")
-	TextLabel.Size = UDim2.new(1, 0, 1, 0)
-	TextLabel.BackgroundTransparency = 1
-	TextLabel.TextScaled = true
-	TextLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
-	TextLabel.TextStrokeTransparency = 0
-	TextLabel.Font = Enum.Font.GothamBold
-	TextLabel.Parent = BillboardGui
-	
-	Highlights[v] = Highlight
-	Billboards[v] = TextLabel
-end
+        -- STUCK CHECK: If no egg collected in 1.5s, nudge the character
+        if tick() - lastCollectionTime > 1.5 then
+            -- Walk backward relative to current facing direction
+            hum:Move(Vector3.new(0, 0, 1), true) 
+        else
+            hum:Move(Vector3.new(0, 0, 0), true) 
+        end
 
-local RemoveVisual = function(v)
-	if Highlights[v] then
-		Highlights[v]:Destroy()
-		Highlights[v] = nil
-	end
-	if Billboards[v] then
-		Billboards[v].Parent:Destroy()
-		Billboards[v] = nil
-	end
-end
+        -- Deposit Logic
+        if currentEggCount >= getgenv().MaxEggsBeforeDeposit then
+            print("🧺 Basket Full! Teleporting to Nest...")
+            SafeTeleport(root, NestPosition)
+            task.wait(0.8) -- Give the server time to process deposit
+            currentEggCount = 0
+            lastCollectionTime = tick() 
+            continue
+        end
 
-EggsFolder.ChildAdded:Connect(CreateVisual)
-EggsFolder.ChildRemoved:Connect(RemoveVisual)
-
-for _, v in ipairs(EggsFolder:GetChildren()) do
-	CreateVisual(v)
-end
-
-RunService.RenderStepped:Connect(function()
-	if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-		return
-	end
-	
-	local HumanoidRootPart = LocalPlayer.Character.HumanoidRootPart
-	
-	for i,v in pairs(Billboards) do
-		local Position = GetPosition(i)
-		if Position then
-			local Distance = (HumanoidRootPart.Position - Position).Magnitude
-
-			v.Text = "🥚 Egg\n" .. math.floor(Distance) .. " studs"
-            if Distance <= 20 and getgenv().AuraCollect then
-                if not Cooldowns[i] then
-                    Cooldowns[i] = true
-
-                    firetouchinterest(HumanoidRootPart, i, 0)
-                    task.delay(1, function()
-                        Cooldowns[i] = nil
-                    end)
+        -- Targeting Logic
+        local targetEgg = nil
+        local shortestDistance = math.huge
+        
+        for _, egg in ipairs(EggsFolder:GetChildren()) do
+            local pos = GetPosition(egg)
+            if pos then
+                local dist = (root.Position - pos).Magnitude
+                if dist < shortestDistance then
+                    shortestDistance = dist
+                    targetEgg = egg
                 end
-		    end
-		end
-	end
+            end
+        end
+
+        -- Collection Logic
+        if targetEgg then
+            local eggPos = GetPosition(targetEgg)
+            SafeTeleport(root, eggPos)
+            
+            -- Fire Touch Interest
+            local touchPart = targetEgg:IsA("Model") and (targetEgg.PrimaryPart or targetEgg:FindFirstChildWhichIsA("BasePart")) or targetEgg
+            if touchPart then
+                firetouchinterest(root, touchPart, 0)
+                task.wait(0.05)
+                firetouchinterest(root, touchPart, 1)
+            end
+            
+            currentEggCount = currentEggCount + 1
+            lastCollectionTime = tick() -- Reset the 'stuck' timer
+        end
+    end
 end)
